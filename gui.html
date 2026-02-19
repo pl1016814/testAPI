@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4 Quadrant GUI Webserver</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .quadrant-container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            width: 100%;
+        }
+
+        .quadrant-row {
+            display: flex;
+            flex-basis: 50%;
+            width: 100%;
+        }
+
+        .quadrant {
+            border: 1px solid #ccc;
+            flex-basis: 50%;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            background-color: #808080;
+            color: white;
+        }
+
+        .quadrant-header {
+            background-color: #6a6a6a;
+            padding: 8px;
+            font-weight: bold;
+            border-bottom: 1px solid #999;
+            color: white;
+        }
+
+        .quadrant-content {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        #quadrant1 .quadrant-content img,
+        #quadrant3 .quadrant-content img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        #quadrant2 .quadrant-content {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto 1fr;
+            grid-template-rows: 1fr auto auto auto 1fr;
+            grid-template-areas:
+                ". .      forward    .       ."
+                ". left   start_stop right   ."
+                ". .      backward   .       .";
+            gap: 10px;
+            padding: 15px;
+            background-color: #808080;
+            justify-items: center;
+            align-items: center;
+        }
+
+        .start-stop-wrapper {
+            grid-area: start_stop;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .control-button {
+            background-color: #e0e0e0;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.2s;
+            width: 90px;
+            text-align: center;
+            color: #333;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .control-button:hover {
+            background-color: #d0d0d0;
+        }
+
+        #forward { grid-area: forward; }
+        #left { grid-area: left; }
+        #right { grid-area: right; }
+        #backward { grid-area: backward; }
+
+        #quadrant4 .quadrant-content {
+            background-color: #d0d0d0;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            text-align: left;
+            align-items: flex-start;
+            overflow-y: scroll;
+            padding: 10px;
+            display: block;
+        }
+
+        #console-log {
+            white-space: pre-wrap;
+            margin: 0;
+            padding: 0;
+            font-size: 0.9em;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">4 Quadrant GUI Webserver</div>
+
+    <div class="quadrant-container">
+        <div class="quadrant-row">
+            <div class="quadrant" id="quadrant1">
+                <div class="quadrant-header">Quadrant 1: Lane Detection</div>
+                <div class="quadrant-content">
+                    <img src="http://192.168.240.150:8081/video_feed_processed" alt="Camera Feed with Lane Detection">
+                </div>
+            </div>
+            <div class="quadrant" id="quadrant2">
+                <div class="quadrant-header">Quadrant 2: Controls</div>
+                <div class="quadrant-content">
+                    <button class="control-button" id="forward" onclick="sendCommand('forward')">Forward</button>
+                    <button class="control-button" id="left" onclick="sendCommand('left')">Left</button>
+
+                    <div class="start-stop-wrapper">
+                        <button class="control-button" id="start" onclick="sendCommand('start')">Start</button>
+                        <button class="control-button" id="stop" onclick="sendCommand('stop')">Stop</button>
+                    </div>
+
+                    <button class="control-button" id="right" onclick="sendCommand('right')">Right</button>
+                    <button class="control-button" id="backward" onclick="sendCommand('backward')">Backward</button>
+                </div>
+            </div>
+        </div>
+        <div class="quadrant-row">
+            <div class="quadrant" id="quadrant3">
+                <div class="quadrant-header">Quadrant 3: Raw Video</div>
+                <div class="quadrant-content">
+                    <img src="http://192.168.240.150:8081/video_feed" alt="Raw Camera Feed">
+                </div>
+            </div>
+            <div class="quadrant" id="quadrant4">
+                <div class="quadrant-header">Quadrant 4: Console</div>
+                <div class="quadrant-content" id="console-quadrant">
+                    <pre id="console-log"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const consoleLog = document.getElementById('console-log');
+        const consoleQuadrant = document.getElementById('console-quadrant');
+
+        const BASE = "http://192.168.240.150:8000";
+
+        function log(s){
+          const now = new Date().toLocaleTimeString();
+          consoleLog.textContent += `[${now}] ${s}\n`;
+          consoleQuadrant.scrollTop = consoleQuadrant.scrollHeight;
+        }
+
+        async function sendState(payload){
+          try{
+            const r = await fetch(`${BASE}/control/set`, {
+              method: "POST",
+              headers: {"Content-Type":"application/json"},
+              body: JSON.stringify(payload)
+            });
+            const j = await r.json();
+            log(`POST /control/set -> ${JSON.stringify(j.state)}`);
+          }catch(e){
+            log(`ERROR: ${e}`);
+          }
+        }
+
+        function commandToPayload(cmd){
+          const p = {up:false, down:false, left:false, right:false, command:cmd};
+          if (cmd === 'forward') p.up = true;
+          if (cmd === 'backward') p.down = true;
+          if (cmd === 'left') p.left = true;
+          if (cmd === 'right') p.right = true;
+          if (cmd === 'stop') { p.up=p.down=p.left=p.right=false; }
+          return p;
+        }
+
+        function sendCommand(cmd){
+          const payload = commandToPayload(cmd);
+          sendState(payload);
+          log(`COMMAND: ${cmd}`);
+        }
+    </script>
+</body>
+</html>
